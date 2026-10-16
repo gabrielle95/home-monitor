@@ -27,6 +27,29 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Diagnose EG.D edge reachability
+        continue-on-error: true
+        run: |
+          echo "=== runner egress IP ==="
+          curl -sS https://api.ipify.org || true
+          echo
+          echo "=== GET egd.cz/formular-bezproudi with browser-ish headers ==="
+          curl -sS -o /tmp/body.html -D /tmp/headers.txt \
+            -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36' \
+            -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' \
+            -H 'Accept-Language: cs,en;q=0.8' \
+            -H 'Upgrade-Insecure-Requests: 1' \
+            -H 'Sec-Fetch-Site: none' \
+            -H 'Sec-Fetch-Mode: navigate' \
+            -H 'Sec-Fetch-Dest: document' \
+            -w 'status=%{http_code}\n' \
+            https://www.egd.cz/formular-bezproudi
+          echo "--- response headers ---"
+          cat /tmp/headers.txt || true
+          echo "--- response body (first 400 chars) ---"
+          head -c 400 /tmp/body.html || true
+          echo
+
       - name: Run outage check
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
