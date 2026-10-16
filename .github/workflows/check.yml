@@ -1,0 +1,50 @@
+name: Check outages
+
+on:
+  schedule:
+    # Daily at 06:00 UTC = 08:00 Europe/Prague (summer) / 07:00 (winter).
+    # Picking an off-the-hour minute to avoid API rush at :00.
+    - cron: "17 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write  # needed to commit updated state/seen.json back
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: check-outages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run outage check
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
+          ADDRESS_LABEL: ${{ secrets.ADDRESS_LABEL }}
+          EGD_ADDRESS_ID: ${{ secrets.EGD_ADDRESS_ID }}
+          EGD_ADDRESS_LABEL: ${{ secrets.EGD_ADDRESS_LABEL }}
+        run: python main.py
+
+      - name: Commit updated state
+        run: |
+          if ! git diff --quiet -- state/seen.json; then
+            git config user.name "home-monitor-bot"
+            git config user.email "home-monitor-bot@users.noreply.github.com"
+            git add state/seen.json
+            git commit -m "chore: update outage state [skip ci]"
+            git push
+          else
+            echo "No state changes."
+          fi

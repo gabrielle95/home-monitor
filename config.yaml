@@ -1,0 +1,30 @@
+# Addresses to monitor. Each provider knows how to interpret the fields it needs.
+#
+# Values use ${VAR} env-var expansion so secrets never land in version control.
+# You can add further addresses by duplicating the block below and plumbing new
+# secrets through .github/workflows/check.yml.
+addresses:
+  - label: "${ADDRESS_LABEL}"
+    egd_address_id: "${EGD_ADDRESS_ID}"
+    egd_address_label: "${EGD_ADDRESS_LABEL}"
+
+# When to send reminders for already-known outages.
+# Reminder fires once, on the day the outage is N days away (0 = day-of).
+reminder_days_before: 1
+
+# Timezone used to compute reminder dates.
+timezone: "Europe/Prague"
+
+# Email recipient(s). Sender is configured via env (GMAIL_USER / GMAIL_APP_PASSWORD).
+# `to` accepts:
+#   - a single address: "you@example.com"
+#   - a comma- or semicolon-separated string: "you@example.com, partner@example.com"
+#   - a YAML list:
+#       to:
+#         - you@example.com
+#         - partner@example.com
+# The default below reads from the NOTIFY_TO secret; set that to a comma-
+# separated list to notify multiple people from a single GitHub secret.
+notify:
+  to: "${NOTIFY_TO}"
+  subject_prefix: "[home-monitor]"
