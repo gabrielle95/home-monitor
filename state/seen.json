@@ -1,4 +1,15 @@
 {
-  "outages": {},
+  "outages": {
+    "egd:260453312": {
+      "address_label": "Pisarky - Home",
+      "description": "Číslo odstávky: 260453312. Týká se domů 68/4, 69/6, 70/8, 71/10, 72/12",
+      "end": "2026-10-16T16:00:00+02:00",
+      "external_id": "260453312",
+      "provider": "egd",
+      "start": "2026-10-16T12:00:00+02:00",
+      "url": "https://www.egd.cz/formular-bezproudi",
+      "utility": "electricity"
+    }
+  },
   "reminded": {}
 }
