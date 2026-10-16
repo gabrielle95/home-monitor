@@ -11,5 +11,7 @@
       "utility": "electricity"
     }
   },
-  "reminded": {}
+  "reminded": {
+    "egd:260453312": "2026-10-16"
+  }
 }
