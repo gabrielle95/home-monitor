@@ -38,8 +38,8 @@ jobs:
         # The self-hosted runner must have python3.12 + venv available.
         # Validate the version here so a bad environment fails fast.
         run: |
-          python3.12 --version
-          python3.12 -m venv .venv
+          python3 --version
+          python3 -m venv .venv
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install -r requirements.txt
 
