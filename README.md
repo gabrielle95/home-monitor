@@ -2,12 +2,16 @@
 
 Daily watcher for **planned utility outages** at a Czech address. Currently
 monitors **EG.D electricity**. O2 internet is a pluggable stub (no public feed
-exists — see below). Runs free on GitHub Actions; emails you via Gmail when a
-new outage is found or an upcoming one is about to start.
+exists — see below). The schedule is orchestrated by GitHub Actions; the actual
+request is executed on a **self-hosted runner at home** (see below for why).
+Emails you via Gmail when a new outage is found or an upcoming one is about to
+start.
 
 ## How it works
 
-- A scheduled GitHub Actions job runs once a day.
+- A scheduled GitHub Actions job runs once a day on a self-hosted runner
+  (your own machine). EG.D's Azure WAF blocks GitHub-hosted runner IPs, but
+  your home ISP IP is not blocked, so the runner lives at home.
 - Each provider fetches outages for configured addresses.
 - The orchestrator compares against `state/seen.json` (committed back to the
   repo) and sends a single Gmail digest with:
@@ -72,7 +76,50 @@ Pick the entry that matches your address. Its `id` is already formatted as
 - `EGD_ADDRESS_LABEL` — the `<label>` part (everything before the trailing ` (…)`), identical to the `label` field.
 - `EGD_ADDRESS_ID`    — the 24-hex id inside the parentheses.
 
-### 4. Verify the workflow
+### 4. Set up the self-hosted runner
+
+**Why self-hosted?** EG.D sits behind an Azure Application Gateway WAF that
+returns `403 Přístup odepřen` to requests from GitHub-hosted runner IPs. Any
+header tweak gets the same answer — the block is at the IP layer. A runner
+living on your own machine egresses from your home ISP IP, which is not
+blocked. The runner polls GitHub outbound-only, so your home server does **not**
+need to be exposed on the public internet.
+
+Prerequisites on the Linux server:
+
+```sh
+# Python 3.12 (Debian/Ubuntu example — adapt for your distro):
+sudo apt install -y python3.12 python3.12-venv git curl jq
+```
+
+Register the runner (one time):
+
+1. On GitHub, go to **Settings → Actions → Runners → New self-hosted runner**.
+2. Select **Linux** and your architecture (x64 or ARM64). GitHub shows a block
+   of commands — follow it. In short, on the server:
+
+   ```sh
+   mkdir ~/actions-runner && cd ~/actions-runner
+   curl -o actions-runner-linux.tar.gz -L <URL-from-github>
+   tar xzf actions-runner-linux.tar.gz
+   # Register — accept defaults EXCEPT when prompted for labels:
+   ./config.sh --url https://github.com/<you>/home-monitor --token <token-from-github> \
+               --labels home-server
+   ```
+
+   The `home-server` label is important — the workflow pins to it.
+
+3. Install the runner as a systemd service so it survives reboots:
+
+   ```sh
+   sudo ./svc.sh install
+   sudo ./svc.sh start
+   sudo ./svc.sh status      # should show "active (running)"
+   ```
+
+4. Confirm the runner appears **Idle** in **Settings → Actions → Runners**.
+
+### 5. Verify the workflow
 
 - Go to **Actions → Check outages → Run workflow** to trigger it manually.
 - The job will log how many outages each provider returned and whether an
@@ -164,3 +211,13 @@ home-monitor/
 - The EG.D antibot key transform (reverse string, swap adjacent char pairs) is
   implemented in `providers/egd.py::_transform_antibot`. If the shape of their
   form changes, re-inspect `drupalSettings.antibot` and `footer.js`.
+- **Self-hosted runner security:** the workflow has no `pull_request` trigger
+  and an explicit `if:` guard rejecting any event other than `schedule`,
+  `workflow_dispatch`, or a `push` by the repo owner. This prevents an
+  outside PR author from running arbitrary code on your home server. If you
+  ever add a `pull_request` trigger, you must also change the runner labels
+  or move the job back to `ubuntu-latest`.
+- **Runner troubleshooting:** `sudo journalctl -u 'actions.runner.*' -f` on
+  the home server tails the runner logs. If a scheduled run misses, check:
+  (a) runner is **Idle** in GitHub UI, (b) server has internet, (c) Python
+  3.12 still resolves on the server's `PATH` for the runner user.

@@ -6,49 +6,42 @@ on:
     # Picking an off-the-hour minute to avoid API rush at :00.
     - cron: "17 6 * * *"
   workflow_dispatch: {}
+  # NB: no `pull_request` trigger — see the top-level `if:` guard below.
+  # Self-hosted runners must never execute untrusted PR code (would RCE the
+  # home server). The workflow is only safe to run on commits we own.
 
 permissions:
   contents: write  # needed to commit updated state/seen.json back
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Pin to the self-hosted runner labelled `home-server`. EG.D's Azure WAF
+    # blocks GitHub-hosted runner IPs; the home runner egresses from a Czech
+    # residential IP and is not blocked.
+    runs-on: [self-hosted, Linux, home-server]
+
+    # Defense-in-depth: even without a pull_request trigger, refuse to run on
+    # anything that isn't an owner-driven event.
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.repository_owner == github.actor)
+
     concurrency:
       group: check-outages
       cancel-in-progress: false
+
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Diagnose EG.D edge reachability
-        continue-on-error: true
+      - name: Set up Python
+        # The self-hosted runner must have python3.12 + venv available.
+        # Validate the version here so a bad environment fails fast.
         run: |
-          echo "=== runner egress IP ==="
-          curl -sS https://api.ipify.org || true
-          echo
-          echo "=== GET egd.cz/formular-bezproudi with browser-ish headers ==="
-          curl -sS -o /tmp/body.html -D /tmp/headers.txt \
-            -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36' \
-            -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' \
-            -H 'Accept-Language: cs,en;q=0.8' \
-            -H 'Upgrade-Insecure-Requests: 1' \
-            -H 'Sec-Fetch-Site: none' \
-            -H 'Sec-Fetch-Mode: navigate' \
-            -H 'Sec-Fetch-Dest: document' \
-            -w 'status=%{http_code}\n' \
-            https://www.egd.cz/formular-bezproudi
-          echo "--- response headers ---"
-          cat /tmp/headers.txt || true
-          echo "--- response body (first 400 chars) ---"
-          head -c 400 /tmp/body.html || true
-          echo
+          python3.12 --version
+          python3.12 -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
 
       - name: Run outage check
         env:
@@ -58,7 +51,7 @@ jobs:
           ADDRESS_LABEL: ${{ secrets.ADDRESS_LABEL }}
           EGD_ADDRESS_ID: ${{ secrets.EGD_ADDRESS_ID }}
           EGD_ADDRESS_LABEL: ${{ secrets.EGD_ADDRESS_LABEL }}
-        run: python main.py
+        run: .venv/bin/python main.py
 
       - name: Commit updated state
         run: |
